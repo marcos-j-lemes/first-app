@@ -15,6 +15,7 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
 
   <style>
+    /* Fontes com fallback seguro para Android antigo */
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@800&display=swap');
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -29,29 +30,47 @@
     body {
       background: var(--bg);
       color: #fff;
-      font-family: 'Space Mono', monospace;
+      /* dvh não suportado em Chrome antigo — usar 100vh com fallback */
+      min-height: 100vh;
       min-height: 100dvh;
+      display: -webkit-box;
+      display: -webkit-flex;
       display: flex;
+      -webkit-box-orient: vertical;
+      -webkit-flex-direction: column;
       flex-direction: column;
+      -webkit-box-align: center;
+      -webkit-align-items: center;
       align-items: center;
+      -webkit-box-pack: center;
+      -webkit-justify-content: center;
       justify-content: center;
       padding: 2rem;
       overflow: hidden;
+      font-family: 'Space Mono', 'Courier New', monospace;
     }
 
-    /* Animated grid background */
+    /* Animated grid background — inset substituído por top/right/bottom/left para compatibilidade */
     body::before {
       content: '';
       position: fixed;
-      inset: 0;
+      top: 0; right: 0; bottom: 0; left: 0;
+      background-image:
+        -webkit-linear-gradient(rgba(0,255,136,0.04) 1px, transparent 1px),
+        -webkit-linear-gradient(left, rgba(0,255,136,0.04) 1px, transparent 1px);
       background-image:
         linear-gradient(rgba(0,255,136,0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0,255,136,0.04) 1px, transparent 1px);
       background-size: 40px 40px;
       z-index: 0;
+      -webkit-animation: gridMove 20s linear infinite;
       animation: gridMove 20s linear infinite;
     }
 
+    @-webkit-keyframes gridMove {
+      0%   { background-position: 0 0; }
+      100% { background-position: 40px 40px; }
+    }
     @keyframes gridMove {
       0%   { background-position: 0 0; }
       100% { background-position: 40px 40px; }
@@ -80,7 +99,8 @@
     }
 
     h1 {
-      font-family: 'Syne', sans-serif;
+      font-family: 'Syne', Georgia, serif;
+      font-size: 3.5rem;
       font-size: clamp(3rem, 14vw, 5.5rem);
       line-height: 1;
       letter-spacing: -0.02em;
@@ -161,7 +181,9 @@
     }
 
     #install-btn:hover {
+      -webkit-transform: translateY(-2px);
       transform: translateY(-2px);
+      -webkit-box-shadow: 0 8px 24px rgba(0,255,136,0.3);
       box-shadow: 0 8px 24px rgba(0,255,136,0.3);
     }
 
@@ -175,9 +197,13 @@
       animation: fadeUp 0.6s 1.1s forwards;
     }
 
+    @-webkit-keyframes fadeUp {
+      from { opacity: 0; -webkit-transform: translateY(16px); transform: translateY(16px); }
+      to   { opacity: 1; -webkit-transform: translateY(0);    transform: translateY(0); }
+    }
     @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
+      from { opacity: 0; -webkit-transform: translateY(16px); transform: translateY(16px); }
+      to   { opacity: 1; -webkit-transform: translateY(0);    transform: translateY(0); }
     }
   </style>
 </head>
@@ -211,9 +237,15 @@
 </div>
 
 <script>
+  // Proteção global contra erros inesperados em browsers antigos
+  window.onerror = function(msg, src, line) {
+    console.warn('[PWA] Erro capturado:', msg, 'linha:', line);
+    return true; // impede crash silencioso
+  };
+
   // --- Status de rede ---
-  const dotNet = document.getElementById('dot-net');
-  const valNet = document.getElementById('val-net');
+  var dotNet = document.getElementById('dot-net');
+  var valNet = document.getElementById('val-net');
 
   function updateNet() {
     if (navigator.onLine) {
@@ -229,45 +261,50 @@
   window.addEventListener('offline', updateNet);
 
   // --- Service Worker ---
-  const dotSW = document.getElementById('dot-sw');
-  const valSW = document.getElementById('val-sw');
-  const valCache = document.getElementById('val-cache');
+  var dotSW = document.getElementById('dot-sw');
+  var valSW = document.getElementById('val-sw');
+  var valCache = document.getElementById('val-cache');
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js')
-      .then(reg => {
-        dotSW.className = 'dot online';
-        valSW.textContent = 'ativo';
-        valCache.textContent = 'habilitado';
-        console.log('[SW] Registrado:', reg.scope);
-      })
-      .catch(err => {
-        dotSW.className = 'dot offline';
-        valSW.textContent = 'erro';
-        valCache.textContent = 'desabilitado';
-        console.error('[SW] Erro:', err);
-      });
+    try {
+      navigator.serviceWorker.register('./sw.js')
+        .then(function(reg) {
+          dotSW.className = 'dot online';
+          valSW.textContent = 'ativo';
+          valCache.textContent = 'habilitado';
+        })
+        .catch(function(err) {
+          dotSW.className = 'dot offline';
+          valSW.textContent = 'erro';
+          valCache.textContent = 'desabilitado';
+          console.error('[SW] Erro:', err);
+        });
+    } catch(e) {
+      valSW.textContent = 'não suportado';
+      valCache.textContent = '—';
+    }
   } else {
     valSW.textContent = 'não suportado';
   }
 
   // --- Botão de instalação ---
-  let deferredPrompt;
-  const installBtn = document.getElementById('install-btn');
+  var deferredPrompt;
+  var installBtn = document.getElementById('install-btn');
 
-  window.addEventListener('beforeinstallprompt', e => {
+  window.addEventListener('beforeinstallprompt', function(e) {
     e.preventDefault();
     deferredPrompt = e;
     installBtn.classList.add('visible');
   });
 
-  installBtn.addEventListener('click', async () => {
+  installBtn.addEventListener('click', function() {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log('[PWA] Instalação:', outcome);
-    deferredPrompt = null;
-    installBtn.classList.remove('visible');
+    deferredPrompt.userChoice.then(function(result) {
+      console.log('[PWA] Instalação:', result.outcome);
+      deferredPrompt = null;
+      installBtn.classList.remove('visible');
+    });
   });
 </script>
 
